@@ -1,154 +1,233 @@
-package com.edutech.controller;
+Great. Backend is compiling now.
+Now we move to:
+STEP 6 — FRONTEND EMAIL OTP INTEGRATION
+We will now implement registration email verification UI in Angular.
+FINAL REGISTRATION FLOW
+Plain text
+Enter details
+      ↓
+Click Send OTP
+      ↓
+OTP received on email
+      ↓
+Enter OTP
+      ↓
+Verify OTP
+      ↓
+Enable Register button
+STEP 6.1 — OPEN auth.service.ts
+Go to:
+Plain text
+client/src/app/services/auth.service.ts
+ADD THESE METHODS
+Paste BELOW existing methods:
+TypeScript
+sendEmailOtp(email: string) {
 
-import com.edutech.dto.EmailOtpRequest;
-import com.edutech.dto.VerifyEmailOtpRequest;
-
-import com.edutech.entity.User;
-
-import com.edutech.security.JwtUtil;
-
-import com.edutech.service.UserService;
-
-import org.springframework.beans.factory.annotation.Autowired;
-
-import org.springframework.http.ResponseEntity;
-
-import org.springframework.web.bind.annotation.*;
-
-import java.util.Map;
-import java.util.Optional;
-
-@RestController
-@RequestMapping("/api/auth")
-
-@CrossOrigin(origins = "*")
-public class AuthController {
-
-    @Autowired
-    private UserService userService;
-
-    @Autowired
-    private JwtUtil jwtUtil;
-
-    // REGISTER USER
-    @PostMapping("/register")
-    public ResponseEntity<?> registerUser(
-            @RequestBody User user
-    ) {
-
-        User savedUser =
-                userService.registerUser(user);
-
-        return ResponseEntity.ok(savedUser);
-    }
-
-    // LOGIN USER
-    @PostMapping("/login")
-    public ResponseEntity<?> loginUser(
-            @RequestBody User loginRequest
-    ) {
-
-        Optional<User> optionalUser =
-                userService.loginUser(
-                        loginRequest.getUsername(),
-                        loginRequest.getPassword()
-                );
-
-        if (optionalUser.isPresent()) {
-
-            User user = optionalUser.get();
-
-            String token =
-                    jwtUtil.generateToken(
-                            user.getUsername()
-                    );
-
-            return ResponseEntity.ok(
-                    Map.of(
-                            "token", token,
-                            "role", user.getRole(),
-                            "username", user.getUsername()
-                    )
-            );
-        }
-
-        return ResponseEntity
-                .badRequest()
-                .body(
-                        Map.of(
-                                "message",
-                                "Invalid username or password"
-                        )
-                );
-    }
-
-    // SEND EMAIL OTP
-    @PostMapping("/send-email-otp")
-    public ResponseEntity<?> sendEmailOtp(
-            @RequestBody EmailOtpRequest request
-    ) {
-
-        userService.generateEmailOtp(
-                request.getEmail()
-        );
-
-        return ResponseEntity.ok(
-                Map.of(
-                        "message",
-                        "OTP sent successfully"
-                )
-        );
-    }
-
-    // VERIFY EMAIL OTP
-    @PostMapping("/verify-email-otp")
-    public ResponseEntity<?> verifyEmailOtp(
-            @RequestBody VerifyEmailOtpRequest request
-    ) {
-
-        boolean verified =
-                userService.verifyEmailOtp(
-                        request.getEmail(),
-                        request.getOtp()
-                );
-
-        if (!verified) {
-
-            return ResponseEntity
-                    .badRequest()
-                    .body(
-                            Map.of(
-                                    "message",
-                                    "Invalid or expired OTP"
-                            )
-                    );
-        }
-
-        return ResponseEntity.ok(
-                Map.of(
-                        "message",
-                        "OTP verified successfully"
-                )
-        );
-    }
-
-    // RESET PASSWORD USING EMAIL OTP
-    @PostMapping("/reset-password")
-    public ResponseEntity<?> resetPassword(
-            @RequestParam String email,
-            @RequestParam String newPassword
-    ) {
-
-        userService.resetPassword(
-                email,
-                newPassword
-        );
-
-        return ResponseEntity.ok(
-                Map.of(
-                        "message",
-                        "Password reset successful"
-                )
-        );
-    }
+  return this.http.post(
+    `${this.baseUrl}/auth/send-email-otp`,
+    { email }
+  );
 }
+ADD VERIFY METHOD
+TypeScript
+verifyEmailOtp(
+  email: string,
+  otp: string
+) {
+
+  return this.http.post(
+    `${this.baseUrl}/auth/verify-email-otp`,
+    {
+      email,
+      otp
+    }
+  );
+}
+STEP 6.2 — OPEN register.component.ts
+Go to:
+Plain text
+client/src/app/auth/register/register.component.ts
+ADD THESE VARIABLES INSIDE CLASS
+TypeScript
+otpSent = false;
+
+otpVerified = false;
+
+emailOtp = '';
+STEP 6.3 — ADD sendOtp() METHOD
+Paste inside class:
+TypeScript
+sendOtp() {
+
+  const email =
+    this.registerForm.value.email;
+
+  this.authService
+      .sendEmailOtp(email)
+      .subscribe({
+
+        next: () => {
+
+          this.otpSent = true;
+
+          alert(
+            'OTP sent successfully'
+          );
+        },
+
+        error: () => {
+
+          alert(
+            'Failed to send OTP'
+          );
+        }
+      });
+}
+STEP 6.4 — ADD verifyOtp() METHOD
+Paste BELOW previous method:
+TypeScript
+verifyOtp() {
+
+  const email =
+    this.registerForm.value.email;
+
+  this.authService
+      .verifyEmailOtp(
+          email,
+          this.emailOtp
+      )
+      .subscribe({
+
+        next: () => {
+
+          this.otpVerified = true;
+
+          alert(
+            'OTP verified successfully'
+          );
+        },
+
+        error: () => {
+
+          alert(
+            'Invalid OTP'
+          );
+        }
+      });
+}
+STEP 6.5 — PREVENT REGISTER BEFORE OTP VERIFICATION
+Inside your existing register method:
+ADD THIS AT TOP:
+TypeScript
+if (!this.otpVerified) {
+
+  alert(
+    'Please verify email OTP first'
+  );
+
+  return;
+}
+STEP 6.6 — OPEN register.component.html
+Go to:
+Plain text
+client/src/app/auth/register/register.component.html
+ADD SEND OTP BUTTON BELOW EMAIL FIELD
+Paste:
+HTML
+<button
+  type="button"
+  class="btn btn-warning mt-2"
+  (click)="sendOtp()">
+
+  Send OTP
+</button>
+ADD OTP INPUT FIELD
+Paste BELOW Send OTP button:
+HTML
+<div *ngIf="otpSent">
+
+  <input
+    type="text"
+    class="form-control mt-2"
+    placeholder="Enter OTP"
+    [(ngModel)]="emailOtp"
+    name="emailOtp">
+
+</div>
+ADD VERIFY OTP BUTTON
+Paste BELOW OTP input:
+HTML
+<div *ngIf="otpSent">
+
+  <button
+    type="button"
+    class="btn btn-success mt-2"
+    (click)="verifyOtp()">
+
+    Verify OTP
+  </button>
+
+</div>
+ADD SUCCESS MESSAGE
+Paste BELOW verify button:
+HTML
+<div
+  *ngIf="otpVerified"
+  class="text-success mt-2">
+
+  Email verified successfully
+</div>
+STEP 6.7 — DISABLE REGISTER BUTTON
+Find your Register button.
+Modify:
+HTML
+[disabled]="!otpVerified"
+Example:
+HTML
+<button
+  type="submit"
+  [disabled]="!otpVerified">
+
+  Register
+</button>
+STEP 6.8 — IMPORT FormsModule
+If ngModel gives error:
+Open:
+Plain text
+app.module.ts
+Ensure:
+TypeScript
+import { FormsModule } from '@angular/forms';
+AND:
+TypeScript
+FormsModule
+inside imports array.
+AFTER THIS
+Restart Angular:
+Bash
+ng serve
+TEST COMPLETE FLOW
+TEST 1
+Click:
+Plain text
+Send OTP
+Expected:
+✅ Email received
+TEST 2
+Enter OTP.
+Click:
+Plain text
+Verify OTP
+Expected:
+✅ OTP verified
+TEST 3
+Register button enabled.
+TEST 4
+Register successfully.
+AFTER COMPLETING
+Say:
+Plain text
+Step 6 completed
+Then we’ll implement:
+STEP 7 — Forgot Password using Email OTP
