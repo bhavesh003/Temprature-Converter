@@ -1,22 +1,155 @@
-public void sendEmailOtp(
-        String toEmail,
-        String otp
-) {
+package com.edutech.service;
 
-    SimpleMailMessage message =
-            new SimpleMailMessage();
+import com.edutech.entity.User;
+import com.edutech.repository.UserRepository;
 
-    message.setTo(toEmail);
+import org.springframework.beans.factory.annotation.Autowired;
 
-    message.setSubject(
-            "Email Verification OTP"
-    );
+import org.springframework.security.crypto.password.PasswordEncoder;
 
-    message.setText(
-            "Your OTP for Freelancer Marketplace is: "
-                    + otp
-                    + "\n\nThis OTP expires in 5 minutes."
-    );
+import org.springframework.stereotype.Service;
 
-    mailSender.send(message);
+import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.Random;
+
+@Service
+public class UserService {
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private EmailService emailService;
+
+    // REGISTER USER
+    public User registerUser(User user) {
+
+        user.setPassword(
+                passwordEncoder.encode(
+                        user.getPassword()
+                )
+        );
+
+        return userRepository.save(user);
+    }
+
+    // LOGIN USER
+    public Optional<User> loginUser(
+            String username,
+            String password
+    ) {
+
+        Optional<User> optionalUser =
+                userRepository.findByUsername(
+                        username
+                );
+
+        if (optionalUser.isPresent()) {
+
+            User user = optionalUser.get();
+
+            if (passwordEncoder.matches(
+                    password,
+                    user.getPassword()
+            )) {
+
+                return Optional.of(user);
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    // GENERATE EMAIL OTP
+    public void generateEmailOtp(String email) {
+
+        User user = userRepository
+                .findByEmail(email)
+                .orElse(new User());
+
+        String otp =
+                String.valueOf(
+                        100000 +
+                        new Random().nextInt(900000)
+                );
+
+        user.setEmail(email);
+
+        user.setEmailOtp(otp);
+
+        user.setEmailOtpExpiry(
+                LocalDateTime.now().plusMinutes(5)
+        );
+
+        userRepository.save(user);
+
+        emailService.sendEmailOtp(
+                email,
+                otp
+        );
+    }
+
+    // VERIFY EMAIL OTP
+    public boolean verifyEmailOtp(
+            String email,
+            String otp
+    ) {
+
+        User user = userRepository
+                .findByEmail(email)
+                .orElseThrow(() ->
+                        new RuntimeException(
+                                "User not found"
+                        ));
+
+        if (user.getEmailOtp() == null) {
+            return false;
+        }
+
+        if (user.getEmailOtpExpiry()
+                .isBefore(LocalDateTime.now())) {
+
+            return false;
+        }
+
+        if (!user.getEmailOtp().equals(otp)) {
+            return false;
+        }
+
+        user.setEmailVerified(true);
+
+        user.setEmailOtp(null);
+
+        user.setEmailOtpExpiry(null);
+
+        userRepository.save(user);
+
+        return true;
+    }
+
+    // RESET PASSWORD AFTER OTP VERIFICATION
+    public void resetPassword(
+            String email,
+            String newPassword
+    ) {
+
+        User user = userRepository
+                .findByEmail(email)
+                .orElseThrow(() ->
+                        new RuntimeException(
+                                "User not found"
+                        ));
+
+        user.setPassword(
+                passwordEncoder.encode(
+                        newPassword
+                )
+        );
+
+        userRepository.save(user);
+    }
 }
