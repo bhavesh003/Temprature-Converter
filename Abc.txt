@@ -1,155 +1,154 @@
-package com.edutech.service;
+package com.edutech.controller;
+
+import com.edutech.dto.EmailOtpRequest;
+import com.edutech.dto.VerifyEmailOtpRequest;
 
 import com.edutech.entity.User;
-import com.edutech.repository.UserRepository;
+
+import com.edutech.security.JwtUtil;
+
+import com.edutech.service.UserService;
 
 import org.springframework.beans.factory.annotation.Autowired;
 
-import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.http.ResponseEntity;
 
-import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.Optional;
-import java.util.Random;
 
-@Service
-public class UserService {
+@RestController
+@RequestMapping("/api/auth")
 
-    @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private PasswordEncoder passwordEncoder;
+@CrossOrigin(origins = "*")
+public class AuthController {
 
     @Autowired
-    private EmailService emailService;
+    private UserService userService;
+
+    @Autowired
+    private JwtUtil jwtUtil;
 
     // REGISTER USER
-    public User registerUser(User user) {
+    @PostMapping("/register")
+    public ResponseEntity<?> registerUser(
+            @RequestBody User user
+    ) {
 
-        user.setPassword(
-                passwordEncoder.encode(
-                        user.getPassword()
-                )
-        );
+        User savedUser =
+                userService.registerUser(user);
 
-        return userRepository.save(user);
+        return ResponseEntity.ok(savedUser);
     }
 
     // LOGIN USER
-    public Optional<User> loginUser(
-            String username,
-            String password
+    @PostMapping("/login")
+    public ResponseEntity<?> loginUser(
+            @RequestBody User loginRequest
     ) {
 
         Optional<User> optionalUser =
-                userRepository.findByUsername(
-                        username
+                userService.loginUser(
+                        loginRequest.getUsername(),
+                        loginRequest.getPassword()
                 );
 
         if (optionalUser.isPresent()) {
 
             User user = optionalUser.get();
 
-            if (passwordEncoder.matches(
-                    password,
-                    user.getPassword()
-            )) {
+            String token =
+                    jwtUtil.generateToken(
+                            user.getUsername()
+                    );
 
-                return Optional.of(user);
-            }
+            return ResponseEntity.ok(
+                    Map.of(
+                            "token", token,
+                            "role", user.getRole(),
+                            "username", user.getUsername()
+                    )
+            );
         }
 
-        return Optional.empty();
+        return ResponseEntity
+                .badRequest()
+                .body(
+                        Map.of(
+                                "message",
+                                "Invalid username or password"
+                        )
+                );
     }
 
-    // GENERATE EMAIL OTP
-    public void generateEmailOtp(String email) {
+    // SEND EMAIL OTP
+    @PostMapping("/send-email-otp")
+    public ResponseEntity<?> sendEmailOtp(
+            @RequestBody EmailOtpRequest request
+    ) {
 
-        User user = userRepository
-                .findByEmail(email)
-                .orElse(new User());
-
-        String otp =
-                String.valueOf(
-                        100000 +
-                        new Random().nextInt(900000)
-                );
-
-        user.setEmail(email);
-
-        user.setEmailOtp(otp);
-
-        user.setEmailOtpExpiry(
-                LocalDateTime.now().plusMinutes(5)
+        userService.generateEmailOtp(
+                request.getEmail()
         );
 
-        userRepository.save(user);
-
-        emailService.sendEmailOtp(
-                email,
-                otp
+        return ResponseEntity.ok(
+                Map.of(
+                        "message",
+                        "OTP sent successfully"
+                )
         );
     }
 
     // VERIFY EMAIL OTP
-    public boolean verifyEmailOtp(
-            String email,
-            String otp
+    @PostMapping("/verify-email-otp")
+    public ResponseEntity<?> verifyEmailOtp(
+            @RequestBody VerifyEmailOtpRequest request
     ) {
 
-        User user = userRepository
-                .findByEmail(email)
-                .orElseThrow(() ->
-                        new RuntimeException(
-                                "User not found"
-                        ));
+        boolean verified =
+                userService.verifyEmailOtp(
+                        request.getEmail(),
+                        request.getOtp()
+                );
 
-        if (user.getEmailOtp() == null) {
-            return false;
+        if (!verified) {
+
+            return ResponseEntity
+                    .badRequest()
+                    .body(
+                            Map.of(
+                                    "message",
+                                    "Invalid or expired OTP"
+                            )
+                    );
         }
 
-        if (user.getEmailOtpExpiry()
-                .isBefore(LocalDateTime.now())) {
-
-            return false;
-        }
-
-        if (!user.getEmailOtp().equals(otp)) {
-            return false;
-        }
-
-        user.setEmailVerified(true);
-
-        user.setEmailOtp(null);
-
-        user.setEmailOtpExpiry(null);
-
-        userRepository.save(user);
-
-        return true;
-    }
-
-    // RESET PASSWORD AFTER OTP VERIFICATION
-    public void resetPassword(
-            String email,
-            String newPassword
-    ) {
-
-        User user = userRepository
-                .findByEmail(email)
-                .orElseThrow(() ->
-                        new RuntimeException(
-                                "User not found"
-                        ));
-
-        user.setPassword(
-                passwordEncoder.encode(
-                        newPassword
+        return ResponseEntity.ok(
+                Map.of(
+                        "message",
+                        "OTP verified successfully"
                 )
         );
+    }
 
-        userRepository.save(user);
+    // RESET PASSWORD USING EMAIL OTP
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(
+            @RequestParam String email,
+            @RequestParam String newPassword
+    ) {
+
+        userService.resetPassword(
+                email,
+                newPassword
+        );
+
+        return ResponseEntity.ok(
+                Map.of(
+                        "message",
+                        "Password reset successful"
+                )
+        );
     }
 }
