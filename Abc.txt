@@ -1,0 +1,22 @@
+public void sendEmailOtp(
+        String toEmail,
+        String otp
+) {
+
+    SimpleMailMessage message =
+            new SimpleMailMessage();
+
+    message.setTo(toEmail);
+
+    message.setSubject(
+            "Email Verification OTP"
+    );
+
+    message.setText(
+            "Your OTP for Freelancer Marketplace is: "
+                    + otp
+                    + "\n\nThis OTP expires in 5 minutes."
+    );
+
+    mailSender.send(message);
+}
